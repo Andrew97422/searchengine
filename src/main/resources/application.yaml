@@ -1,10 +1,34 @@
 # example values
-
 indexing-settings:
   sites:
-    - url: https://www.lenta.ru
-      name: Лента.ру
-    - url: https://www.skillbox.ru
-      name: Skillbox
-    - url: https://www.playback.ru
-      name: PlayBack.Ru
+    #- url: https://orur.ru/
+    #  name: Orur
+    #- url: https://www.skillbox.ru/
+    #  name: Skillbox
+    #- url: https://www.svetlovka.ru/
+    #  name: Svetlovka.Ru
+    #- url: https://www.lutherancathedral.ru/
+    #  name: LutheranCathedral.Ru
+    #- url: https://www.playback.ru/
+    #  name: PlayBack.Ru
+    - url: https://dimonvideo.ru/
+      name: DimonVideo.Ru
+    - url: https://dombulgakova.ru/
+      name: DomBulgakova.Ru
+server:
+  port: 8081
+spring:
+  datasource:
+    username: root
+    password: scipioscipio
+    url:
+      jdbc:mysql://localhost:3306/search_engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        hbm2ddl:
+          auto: create-drop
+    hibernate:
+      ddl-auto: update
+    show-sql: false
