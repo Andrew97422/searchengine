@@ -37,6 +37,10 @@ public class LemmaFinder {
         HashMap<String, Integer> lemmas = new HashMap<>();
 
         for (String word : words) {
+            if (word.matches("[а-ю, a-z]")) {
+                continue;
+            }
+
             if (word.isBlank()) {
                 continue;
             }

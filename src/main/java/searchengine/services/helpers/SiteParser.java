@@ -38,14 +38,16 @@ public class SiteParser {
                 HelpingService.getAddressForRepository(url).substring(0, HelpingService.getAddressForRepository(url).length() - 1) :
                 HelpingService.getAddressForRepository(url);
 
-        if (pageRepository.existsByPathAndSiteEntity(pathForPage, mainSite)) {
-            page = pageRepository.getByPathAndSiteEntity(pathForPage, mainSite);
-        } else {
-            page = PageEntity.builder().code(response.statusCode()).content(doc.html())
-                    .path(pathForPage).siteEntity(mainSite).build();
-            try {
-                pageRepository.save(page);
-            } catch (Exception ignored) {
+        synchronized (SiteParser.class) {
+            if (pageRepository.existsByPathAndSiteEntity(pathForPage, mainSite)) {
+                page = pageRepository.getByPathAndSiteEntity(pathForPage, mainSite);
+            } else {
+                page = PageEntity.builder().code(response.statusCode()).content(doc.html())
+                        .path(pathForPage).siteEntity(mainSite).build();
+                try {
+                    pageRepository.save(page);
+                } catch (Exception ignored) {
+                }
             }
         }
 
@@ -61,7 +63,6 @@ public class SiteParser {
                     (HelpingService.getAddressWithoutW(link.attr("abs:href")).trim().startsWith(HelpingService.getAddressWithoutW(mainSite.getUrl())))
                     ) && !(link.attr("href").matches("^#|/|$"))
             ) {
-                System.out.println("Сохраняем " + link.attr("abs:href"));
                 PageEntity pageEntity = new PageEntity();
                 pageEntity.setSiteEntity(mainSite);
                 if (!link.attr("abs:href").trim().endsWith("/")) {
@@ -72,18 +73,16 @@ public class SiteParser {
                 String addressForRepository = HelpingService.getAddressForRepository(pageEntity.getPath());
                 synchronized (SiteParser.class) {
                     if (!pageRepository.existsByPathAndSiteEntity(addressForRepository.substring(0, addressForRepository.length() - 1), mainSite)) {
+                        System.out.println("Сохраняем " + link.attr("abs:href") + ", отсутствует " + addressForRepository.substring(0, addressForRepository.length() - 1));
                         siteMap.add(link.attr("abs:href").trim());
-                        //String tempPath = pageEntity.getPath();
                         pageEntity.setPath(addressForRepository.substring(0, addressForRepository.length() - 1));
                         try {
                             pageRepository.save(pageEntity);
                         } catch (Exception e) {
-                            System.out.println("Случилась ошибка в " + pageEntity.getPath());
-                            break;
+                            continue;
                         }
                         mainSite.setStatusTime(new Date());
                         siteRepository.save(mainSite);
-                        //pageEntity.setPath(tempPath.trim());
                     }
                 }
             }

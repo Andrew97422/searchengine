@@ -30,6 +30,7 @@ public class RecursiveLinkParser extends RecursiveTask<Set<String>> {
         List<RecursiveLinkParser> tasks = new ArrayList<>();
         try {
             siteMap = SiteParser.parseSiteToLinks(url, mainSite, pageRepository, siteRepository, lemmaRepository, indexRepository);
+            System.out.println("Имеем следующий сайтмэп: " + siteMap);
         } catch (IOException | InterruptedException e) {
             throw new RuntimeException(e);
         }
