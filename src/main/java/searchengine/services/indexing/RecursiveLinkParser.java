@@ -1,4 +1,4 @@
-package searchengine.services.helpers;
+package searchengine.services.indexing;
 
 import lombok.RequiredArgsConstructor;
 import searchengine.model.SiteEntity;
@@ -12,8 +12,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveTask;
 
 @RequiredArgsConstructor
@@ -29,8 +27,8 @@ public class RecursiveLinkParser extends RecursiveTask<Set<String>> {
         HashSet<String> siteMap;
         List<RecursiveLinkParser> tasks = new ArrayList<>();
         try {
-            siteMap = SiteParser.parseSiteToLinks(url, mainSite, pageRepository, siteRepository, lemmaRepository, indexRepository);
-            System.out.println("Имеем следующий сайтмэп: " + siteMap);
+            siteMap = new SiteParser().parseSiteToLinks(url, mainSite, pageRepository, siteRepository, lemmaRepository, indexRepository);
+            //System.out.println("Имеем следующий сайтмэп: " + siteMap);
         } catch (IOException | InterruptedException e) {
             throw new RuntimeException(e);
         }

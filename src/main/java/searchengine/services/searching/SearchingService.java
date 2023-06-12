@@ -1,4 +1,4 @@
-package searchengine.services;
+package searchengine.services.searching;
 
 import searchengine.dto.searching.QueryResponse;
 

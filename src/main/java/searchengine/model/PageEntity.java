@@ -15,7 +15,7 @@ public class PageEntity {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private int id;
 
-    @Column(name = "path", nullable = false)
+    @Column(name = "path", nullable = false, columnDefinition = "TEXT", length = 4196)
     private String path;
 
     @Column(nullable = false)

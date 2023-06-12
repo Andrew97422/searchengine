@@ -1,4 +1,4 @@
-package searchengine.services.impl;
+package searchengine.services.indexing;
 
 import lombok.RequiredArgsConstructor;
 import org.jsoup.Connection;
@@ -12,10 +12,7 @@ import searchengine.repositories.IndexRepository;
 import searchengine.repositories.LemmaRepository;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
-import searchengine.services.IndexingService;
-import searchengine.services.helpers.HelpingService;
-import searchengine.services.helpers.LemmaFinder;
-import searchengine.services.helpers.RecursiveLinkParser;
+import searchengine.services.searching.LemmaFinder;
 
 import java.io.IOException;
 import java.util.*;
@@ -45,8 +42,8 @@ public class IndexingServiceImpl implements IndexingService {
         }
         isRunning = true;
         isStopped = false;
-        pageRepository.deleteAll();
-        siteRepository.deleteAll();
+        //pageRepository.deleteAll();
+        //siteRepository.deleteAll();
 
         for (Site site : sites.getSites()) {
             threadList.add(new Thread(() -> {
@@ -71,11 +68,15 @@ public class IndexingServiceImpl implements IndexingService {
                 try {
                     pool.invoke(new RecursiveLinkParser(siteEntity.getUrl(), siteEntity, pageRepository, siteRepository, lemmaRepository, indexRepository));
                     siteEntity.setStatus(StatusSite.INDEXED);
+                    Thread.sleep(100);
                 } catch (Exception e) {
                     siteEntity.setStatus(StatusSite.FAILED);
                     siteEntity.setStatusTime(new Date());
                     siteEntity.setLastError(e.getLocalizedMessage());
                     e.printStackTrace();
+                    pool.shutdownNow();
+                    isStopped = true;
+                    isRunning = false;
                 }
                 System.out.println("Вышли из сайта " + siteEntity.getUrl());
                 siteRepository.save(siteEntity);
@@ -106,11 +107,12 @@ public class IndexingServiceImpl implements IndexingService {
             pool.shutdownNow();
             isStopped = true;
             isRunning = false;
-        } catch (RuntimeException ignored) {
+            Thread.sleep(100);
+        } catch (RuntimeException | InterruptedException ignored) {
         }
         List<SiteEntity> siteEntities = siteRepository.findAll();
         for (SiteEntity siteEntity : siteEntities) {
-            if (!siteEntity.getStatus().equals(StatusSite.INDEXED)) {
+            if (!siteEntity.getStatus().equals(StatusSite.INDEXED) && !(siteEntity.getStatus().equals(StatusSite.FAILED))) {
                 siteEntity.setLastError("Индексация остановлена пользователем");
                 siteEntity.setStatus(StatusSite.FAILED);
                 siteRepository.save(siteEntity);
@@ -123,7 +125,7 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public Map<String, Object> indexingPage(IndexPage url) {
-        String siteUrl = HelpingService.getNameDomain(url.getUrl());
+        String siteUrl = AddressChanging.getNameDomain(url.getUrl());
 
         for (String u : siteRepository.findAll().stream().map(SiteEntity::getUrl).collect(Collectors.toList())) {
             if (u.contains(siteUrl)) {
@@ -146,9 +148,9 @@ public class IndexingServiceImpl implements IndexingService {
                 String newUrl;
 
                 if (url.getUrl().endsWith("/")) {
-                    newUrl = HelpingService.getAddressForRepository(url.getUrl()).substring(0, url.getUrl().length() - 2);
-                } else newUrl = HelpingService.getAddressForRepository(url.getUrl())
-                        .substring(0, HelpingService.getAddressForRepository(url.getUrl()).length() - 1);
+                    newUrl = AddressChanging.getAddressForRepository(url.getUrl()).substring(0, url.getUrl().length() - 2);
+                } else newUrl = AddressChanging.getAddressForRepository(url.getUrl())
+                        .substring(0, AddressChanging.getAddressForRepository(url.getUrl()).length() - 1);
 
                 if (!pageRepository.existsByPathAndSiteEntity(newUrl, siteRepository.getByUrl(u))) {
                     page = PageEntity.builder().code(response.statusCode()).content(response.body())
@@ -158,7 +160,7 @@ public class IndexingServiceImpl implements IndexingService {
                     page = pageRepository.getByPathAndSiteEntity(newUrl, mainSite);
                 }
 
-                Map<String, Integer> lemmas = lemmaFinder.collectLemmas(LemmaFinder.getHtmlText(response.body()));
+                Map<String, Integer> lemmas = lemmaFinder.collectLemmas(LemmaFinder.cleanFromHtml(response.body()));
                 for (String lemma : lemmas.keySet()) {
                     if (lemmaRepository.existsByLemma(lemma)) {
                         LemmaEntity lemmaEntity = lemmaRepository.findByLemma(lemma);

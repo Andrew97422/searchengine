@@ -1,6 +1,6 @@
-package searchengine.services.helpers;
+package searchengine.services.indexing;
 
-public class HelpingService {
+public class AddressChanging {
     public static String getAddressWithoutW(String address) {
         StringBuilder builder = new StringBuilder();
         if (address.contains("www.")) {
