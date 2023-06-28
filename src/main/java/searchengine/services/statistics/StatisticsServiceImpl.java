@@ -13,6 +13,7 @@ import searchengine.repositories.PageRepository;
 import searchengine.repositories.SiteRepository;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 @Service
@@ -32,18 +33,27 @@ public class StatisticsServiceImpl implements StatisticsService {
         List<DetailedStatisticsItem> detailed = new ArrayList<>();
         List<Site> sitesList = sites.getSites();
 
-        for(int i = 0; i < sitesList.size(); i++) {
+        for (int i = 0; i < sitesList.size(); i++) {
             Site site = sitesList.get(i);
             DetailedStatisticsItem item = new DetailedStatisticsItem();
             item.setName(site.getName());
             item.setUrl(site.getUrl());
-            int pages = pageRepository.countAllBySiteEntity(siteRepository.getByUrl(sitesList.get(i).getUrl()));
-            int lemmas = lemmaRepository.countAllBySiteEntity(siteRepository.getByUrl(sitesList.get(i).getUrl()));
+            int pages = 0;
+            int lemmas = 0;
+            try {
+                pages = pageRepository.countAllBySiteEntity(siteRepository.getByUrl(sitesList.get(i).getUrl()));
+                lemmas = lemmaRepository.countAllBySiteEntity(siteRepository.getByUrl(sitesList.get(i).getUrl()));
+                item.setStatus(siteRepository.getByUrl(sitesList.get(i).getUrl()).getStatus().toString());
+                item.setError(siteRepository.getByUrl(sitesList.get(i).getUrl()).getLastError());
+                item.setStatusTime(siteRepository.getByUrl(sitesList.get(i).getUrl()).getStatusTime().getTime());
+            } catch (NullPointerException e) {
+                item.setStatus("");
+                item.setError("");
+                item.setStatus(new Date().toString());
+            }
             item.setPages(pages);
             item.setLemmas(lemmas);
-            item.setStatus(siteRepository.getByUrl(sitesList.get(i).getUrl()).getStatus().toString());
-            item.setError(siteRepository.getByUrl(sitesList.get(i).getUrl()).getLastError());
-            item.setStatusTime(siteRepository.getByUrl(sitesList.get(i).getUrl()).getStatusTime().getTime());
+
             total.setPages(total.getPages() + pages);
             total.setLemmas(total.getLemmas() + lemmas);
             detailed.add(item);

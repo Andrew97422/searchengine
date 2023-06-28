@@ -42,8 +42,8 @@ public class IndexingServiceImpl implements IndexingService {
         }
         isRunning = true;
         isStopped = false;
-        //pageRepository.deleteAll();
-        //siteRepository.deleteAll();
+        pageRepository.deleteAll();
+        siteRepository.deleteAll();
 
         for (Site site : sites.getSites()) {
             threadList.add(new Thread(() -> {
@@ -69,6 +69,7 @@ public class IndexingServiceImpl implements IndexingService {
                     pool.invoke(new RecursiveLinkParser(siteEntity.getUrl(), siteEntity, pageRepository, siteRepository, lemmaRepository, indexRepository));
                     siteEntity.setStatus(StatusSite.INDEXED);
                     Thread.sleep(100);
+                } catch (RuntimeException | InterruptedException ignored) {
                 } catch (Exception e) {
                     siteEntity.setStatus(StatusSite.FAILED);
                     siteEntity.setStatusTime(new Date());
@@ -94,7 +95,7 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     @Override
-    public Map<String, Object> stopIndexing() {
+    public synchronized Map<String, Object> stopIndexing() {
         if (!isRunning && isStopped) {
             Map<String, Object> response = new HashMap<>();
             response.put("result", false);
@@ -112,7 +113,7 @@ public class IndexingServiceImpl implements IndexingService {
         }
         List<SiteEntity> siteEntities = siteRepository.findAll();
         for (SiteEntity siteEntity : siteEntities) {
-            if (!siteEntity.getStatus().equals(StatusSite.INDEXED) && !(siteEntity.getStatus().equals(StatusSite.FAILED))) {
+            if (siteEntity.getStatus().equals(StatusSite.INDEXING)) {
                 siteEntity.setLastError("Индексация остановлена пользователем");
                 siteEntity.setStatus(StatusSite.FAILED);
                 siteRepository.save(siteEntity);
