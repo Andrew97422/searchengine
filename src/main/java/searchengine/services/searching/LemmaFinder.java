@@ -3,6 +3,7 @@ package searchengine.services.searching;
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
 import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 import org.jsoup.safety.Safelist;
 
 import java.io.IOException;
@@ -123,5 +124,14 @@ public class LemmaFinder {
 
     public static String cleanFromHtml(String html) {
         return Jsoup.clean(html, Safelist.none());
+    }
+
+    public static String getTitle(String content) {
+        Document document = Jsoup.parse(content);
+        return document.title();
+    }
+
+    public String getNormalForm(String word) {
+        return luceneMorphology.getNormalForms(word).get(0);
     }
 }

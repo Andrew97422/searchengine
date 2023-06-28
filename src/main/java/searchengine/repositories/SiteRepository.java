@@ -7,4 +7,5 @@ import searchengine.model.SiteEntity;
 @Repository
 public interface SiteRepository extends JpaRepository<SiteEntity, Integer> {
     SiteEntity getByUrl(String url);
+    boolean existsByUrl(String url);
 }

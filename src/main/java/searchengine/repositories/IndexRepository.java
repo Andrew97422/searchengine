@@ -12,5 +12,7 @@ import java.util.List;
 public interface IndexRepository extends JpaRepository<IndexEntity, Integer> {
     boolean existsByPage(PageEntity page);
     List<IndexEntity> findAllByLemma(LemmaEntity lemma);
-    List<IndexEntity> findAllByLemmaAndPage(LemmaEntity lemma, PageEntity page);
+    //List<IndexEntity> findAllByLemmaAndPage(LemmaEntity lemma, PageEntity page);
+    IndexEntity findByLemmaAndPage(LemmaEntity lemma, PageEntity page);
+    boolean existsByLemmaAndPage(LemmaEntity lemma, PageEntity page);
 }

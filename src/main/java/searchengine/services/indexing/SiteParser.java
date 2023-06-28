@@ -5,7 +5,6 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import org.springframework.transaction.annotation.Transactional;
 import searchengine.model.IndexEntity;
 import searchengine.model.LemmaEntity;
 import searchengine.model.PageEntity;
@@ -23,7 +22,6 @@ import java.util.Map;
 
 public class SiteParser {
 
-    @Transactional
     public HashSet<String> parseSiteToLinks(String url, SiteEntity mainSite, PageRepository pageRepository, SiteRepository siteRepository,
                                                    LemmaRepository lemmaRepository, IndexRepository indexRepository) throws IOException, InterruptedException {
         Connection.Response response;
@@ -71,47 +69,52 @@ public class SiteParser {
                 pageEntity.setContent(response.statusCode() == 200 ? doc.html() : "");
                 String addressForRepository = AddressChanging.getAddressForRepository(pageEntity.getPath());
 
-                if (!pageRepository.existsByPathAndSiteEntity(addressForRepository.substring(0, addressForRepository.length() - 1),
-                        mainSite)) {
-                    System.out.println(Thread.currentThread() + " сохраняет " + link.attr("abs:href"));
-                    siteMap.add(link.attr("abs:href").trim());
-                    pageEntity.setPath(addressForRepository.substring(0, addressForRepository.length() - 1));
-                    try {
-                        pageRepository.save(pageEntity);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                        System.exit(1);
-                        continue;
+                synchronized (PageRepository.class) {
+                    if (!pageRepository.existsByPathAndSiteEntity(addressForRepository.substring(0, addressForRepository.length() - 1),
+                            mainSite)) {
+                        System.out.println(Thread.currentThread() + " сохраняет " + link.attr("abs:href"));
+                        siteMap.add(link.attr("abs:href").trim());
+                        pageEntity.setPath(addressForRepository.substring(0, addressForRepository.length() - 1));
+                        try {
+                            pageRepository.save(pageEntity);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            System.exit(1);
+                            continue;
+                        }
+                        mainSite.setStatusTime(new Date());
+                        siteRepository.save(mainSite);
                     }
-                    mainSite.setStatusTime(new Date());
-                    siteRepository.save(mainSite);
                 }
             }
             Thread.sleep(100);
         }
         return siteMap;
     }
-    @Transactional
     public void saveLemmas(String html, LemmaRepository lemmaRepository,
-                                  SiteEntity mainSite, PageEntity pageEntity, IndexRepository indexRepository) throws IOException {
+                           SiteEntity mainSite, PageEntity pageEntity, IndexRepository indexRepository) throws IOException {
         Map<String, Integer> lemmas = new LemmaFinder().collectLemmas(LemmaFinder.cleanFromHtml(html));
-        if (!indexRepository.existsByPage(pageEntity)) {
-            for (String lemma : lemmas.keySet()) {
-                try {
-                    LemmaEntity lemmaEntity = lemmaRepository.findByLemma(lemma);
-                    lemmaEntity.setFrequency(lemmaEntity.getFrequency() + 1);
-                    lemmaRepository.save(lemmaEntity);
-                } catch (Exception e) {
-                    LemmaEntity lemmaEntity = LemmaEntity.builder().lemma(lemma)
-                            .siteEntity(mainSite).frequency(1).build();
-                    lemmaRepository.save(lemmaEntity);
-                }
-                try {
-                    IndexEntity indexEntity = IndexEntity.builder()
-                            .page(pageEntity).lemma(lemmaRepository.findByLemma(lemma))
-                            .rank(lemmas.get(lemma)).build();
-                    indexRepository.save(indexEntity);
-                } catch (Exception ignored) {
+        synchronized (IndexRepository.class) {
+            if (!indexRepository.existsByPage(pageEntity)) {
+                for (String lemma : lemmas.keySet()) {
+                    synchronized (LemmaRepository.class) {
+                        try {
+                            LemmaEntity lemmaEntity = lemmaRepository.findByLemma(lemma);
+                            lemmaEntity.setFrequency(lemmaEntity.getFrequency() + 1);
+                            lemmaRepository.save(lemmaEntity);
+                        } catch (Exception e) {
+                            LemmaEntity lemmaEntity = LemmaEntity.builder().lemma(lemma)
+                                    .siteEntity(mainSite).frequency(1).build();
+                            lemmaRepository.save(lemmaEntity);
+                        }
+                    }
+                    try {
+                        IndexEntity indexEntity = IndexEntity.builder()
+                                .page(pageEntity).lemma(lemmaRepository.findByLemma(lemma))
+                                .rank((float) lemmas.get(lemma) / lemmas.size() * 100).build();
+                        indexRepository.save(indexEntity);
+                    } catch (Exception ignored) {
+                    }
                 }
             }
         }
