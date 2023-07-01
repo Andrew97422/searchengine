@@ -9,6 +9,5 @@ import searchengine.model.SiteEntity;
 public interface LemmaRepository extends JpaRepository<LemmaEntity, Integer> {
     boolean existsByLemma(String lemma);
     LemmaEntity findByLemma(String lemma);
-
     int countAllBySiteEntity(SiteEntity siteEntity);
 }

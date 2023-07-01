@@ -42,8 +42,6 @@ public class IndexingServiceImpl implements IndexingService {
         }
         isRunning = true;
         isStopped = false;
-        pageRepository.deleteAll();
-        siteRepository.deleteAll();
 
         for (Site site : sites.getSites()) {
             threadList.add(new Thread(() -> {

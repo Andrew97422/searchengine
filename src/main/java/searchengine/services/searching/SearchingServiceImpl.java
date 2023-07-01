@@ -28,7 +28,6 @@ public class SearchingServiceImpl implements SearchingService {
     private final PageRepository pageRepository;
     private final IndexRepository indexRepository;
     private final SiteRepository siteRepository;
-    private static final String NOT_RUSSIAN = "\\W\\w&&[^a-zA-Z0-9]";//"^[0-9a-zA-Z]*$";
     @Override
     public QueryResponse search(String query, String site, Integer offset, Integer limit) {
         if (site.endsWith("/")) {
@@ -41,6 +40,11 @@ public class SearchingServiceImpl implements SearchingService {
         }
 
         List<String> lemmasList = new ArrayList<>(lemmaFinder.getLemmaSet(query));
+        //Отсеиваем неудачные леммы
+        lemmasList.removeIf(lemma -> !lemmaRepository.existsByLemma(lemma));
+        //Отсеиваем слишком часто встречающиеся леммы
+        lemmasList.removeIf(lemma -> ((double) lemmaRepository.findByLemma(lemma).getFrequency() /
+                pageRepository.findAll().size()) > 0.2);
 
         if (lemmasList.size() != 1) {
             try {
@@ -121,8 +125,6 @@ public class SearchingServiceImpl implements SearchingService {
         List<PageEntity> pagesResult = resultList.stream().map(Results::getPageEntity).collect(Collectors.toList());
         pagesResult = new ArrayList<>(new HashSet<>(pagesResult));
 
-        //System.out.println(pagesResult.size());
-        //System.exit(1);
         if (!siteRepository.existsByUrl(site)) {
             List<SiteEntity> sites = siteRepository.findAll();
             for (SiteEntity siteEntity : sites) {
@@ -139,15 +141,6 @@ public class SearchingServiceImpl implements SearchingService {
                     count++;
                     if (count >= limit) break;
                 }
-                /*if (data.isEmpty()) {
-                    System.out.println("Почему-то data empty");
-                    System.out.println("Сниппеты:\n");
-                    for (Results result : resultList) {
-                        System.out.println(getSnippet(result.getPageEntity(), lemmasList));
-                    }
-                    queryResponse = QueryResponse.builder().data(new ArrayList<>()).count(0).result(false).build();
-                    return queryResponse;
-                }*/
                 queryResponse = QueryResponse.builder().result(true).count(data.size()).data(data).build();
             }
         } else if (siteRepository.existsByUrl(site)){
@@ -166,10 +159,6 @@ public class SearchingServiceImpl implements SearchingService {
                     count++;
                     if (count >= limit) break;
                 }
-                /*if (data.isEmpty()) {
-                    queryResponse = QueryResponse.builder().data(new ArrayList<>()).count(0).result(false).build();
-                    return queryResponse;
-                }*/
                 queryResponse = QueryResponse.builder().result(true).count(data.size()).data(data).build();
             } catch (Exception ignored){}
         }
@@ -239,11 +228,8 @@ public class SearchingServiceImpl implements SearchingService {
                 }
             }
         }
-        System.out.println("Sentences we need length - " + sentencesWeNeed.size());
 
         for (String sentence : sentencesWeNeed) {
-            System.out.println("SENTENCE " + sentence);
-
             String[] words = sentence.split("\\s");
             for (String word : words) {
                 String wordSmall = word.toLowerCase();
@@ -262,7 +248,7 @@ public class SearchingServiceImpl implements SearchingService {
         int length = 0;
         int count = 0;
         for (String word : splitString) {
-            if (count > 3)  break;
+            if (count >= 3)  break;
             if (length <= 75) {
                 result.append(word).append(" ");
                 length += word.length();
