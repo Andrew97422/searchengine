@@ -46,7 +46,7 @@ public class SiteParser {
         page = pageRepository.getByPathAndSiteEntity(pathForPage, mainSite);
 
         if (response.statusCode() % 100 != 4 && response.statusCode() % 100 != 5) {
-            saveLemmas(doc.html(), lemmaRepository, mainSite, page, indexRepository);
+            saveLemmas(doc.html(), lemmaRepository, page, indexRepository);
         }
 
         Elements links = doc.select("a[href]");
@@ -92,9 +92,9 @@ public class SiteParser {
         return siteMap;
     }
     public void saveLemmas(String html, LemmaRepository lemmaRepository,
-                           SiteEntity mainSite, PageEntity pageEntity, IndexRepository indexRepository) throws IOException {
+                           PageEntity pageEntity, IndexRepository indexRepository) throws IOException {
         Map<String, Integer> lemmas = new LemmaFinder().collectLemmas(LemmaFinder.cleanFromHtml(html));
-        synchronized (IndexRepository.class) {
+        /*synchronized (IndexRepository.class) {
             if (!indexRepository.existsByPage(pageEntity)) {
                 for (String lemma : lemmas.keySet()) {
                     synchronized (LemmaRepository.class) {
@@ -116,6 +116,27 @@ public class SiteParser {
                     } catch (Exception ignored) {
                     }
                 }
+            }
+        }*/
+        for (String lemma : lemmas.keySet()) {
+            synchronized (LemmaRepository.class) {
+                try {
+                    LemmaEntity lemmaEntity = lemmaRepository.findByLemma(lemma);
+                    lemmaEntity.setFrequency(lemmaEntity.getFrequency() + 1);
+                    lemmaRepository.save(lemmaEntity);
+                } catch (Exception e) {
+                    LemmaEntity lemmaEntity = LemmaEntity.builder().lemma(lemma)
+                            .siteEntity(pageEntity.getSiteEntity()).frequency(1).build();
+                    lemmaRepository.save(lemmaEntity);
+                }
+            }
+
+            try {
+                IndexEntity indexEntity = IndexEntity.builder()
+                        .page(pageEntity).lemma(lemmaRepository.findByLemma(lemma))
+                        .rank((float) lemmas.get(lemma) / lemmas.size() * 100).build();
+                indexRepository.save(indexEntity);
+            } catch (Exception ignored) {
             }
         }
     }

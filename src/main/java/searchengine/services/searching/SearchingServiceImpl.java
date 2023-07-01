@@ -3,6 +3,7 @@ package searchengine.services.searching;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.apache.lucene.morphology.WrongCharaterException;
 import org.springframework.stereotype.Service;
 import searchengine.dto.searching.DataDescription;
 import searchengine.dto.searching.QueryResponse;
@@ -27,8 +28,12 @@ public class SearchingServiceImpl implements SearchingService {
     private final PageRepository pageRepository;
     private final IndexRepository indexRepository;
     private final SiteRepository siteRepository;
+    private static final String NOT_RUSSIAN = "\\W\\w&&[^a-zA-Z0-9]";//"^[0-9a-zA-Z]*$";
     @Override
     public QueryResponse search(String query, String site, Integer offset, Integer limit) {
+        if (site.endsWith("/")) {
+            site = site.substring(0, site.length() - 1);
+        }
         QueryResponse queryResponse = null;
         try {
             lemmaFinder = new LemmaFinder();
@@ -36,37 +41,52 @@ public class SearchingServiceImpl implements SearchingService {
         }
 
         List<String> lemmasList = new ArrayList<>(lemmaFinder.getLemmaSet(query));
-        try {
-            Comparator<String> comparator =
-                    Comparator.comparing(i->lemmaRepository.findByLemma(i).getFrequency());
-            lemmasList = lemmasList.stream().sorted(comparator).collect(Collectors.toList());
-        } catch (NullPointerException e) {
-            queryResponse = QueryResponse.builder().data(new ArrayList<>()).count(0).result(false).build();
-            return queryResponse;
+
+        if (lemmasList.size() != 1) {
+            try {
+                Comparator<String> comparator =
+                        Comparator.comparing(i->lemmaRepository.findByLemma(i).getFrequency());
+                lemmasList.sort(comparator);
+            } catch (NullPointerException e) {
+                queryResponse = QueryResponse.builder().data(new ArrayList<>()).count(0).result(false).build();
+                return queryResponse;
+            }
         }
 
         List<PageEntity> listPages;
         try {
-             listPages = findListPages(lemmasList.get(0));
+            listPages = findListPages(lemmasList.get(0));
         } catch (IndexOutOfBoundsException e) {
             queryResponse = QueryResponse.builder().data(new ArrayList<>()).count(0).result(false).build();
             return queryResponse;
         }
-        List<PageEntity> finalListPages = new ArrayList<>();
 
-        for (int i = 1; i < lemmasList.size(); i++) {
-            LemmaEntity lemmaEntity = lemmaRepository.findByLemma(lemmasList.get(i));
+        Set<PageEntity> finalSetPages = new HashSet<>();
+
+        if (lemmasList.size() != 1) {
+            for (int i = 1; i < lemmasList.size(); i++) {
+                LemmaEntity lemmaEntity = lemmaRepository.findByLemma(lemmasList.get(i));
+                for (int j = offset; j < listPages.size(); j++) {
+                    if (indexRepository.existsByLemmaAndPage(lemmaEntity, listPages.get(j))) {
+                        finalSetPages.add(listPages.get(j));
+                    }
+                }
+            }
+        } else {
+            LemmaEntity lemmaEntity = lemmaRepository.findByLemma(lemmasList.get(0));
             for (int j = offset; j < listPages.size(); j++) {
                 if (indexRepository.existsByLemmaAndPage(lemmaEntity, listPages.get(j))) {
-                    if (!finalListPages.contains(listPages.get(j))) finalListPages.add(listPages.get(j));
+                    finalSetPages.add(listPages.get(j));
                 }
             }
         }
 
-        if (finalListPages.isEmpty()) {
+        if (finalSetPages.isEmpty()) {
             queryResponse = QueryResponse.builder().data(new ArrayList<>()).count(0).result(false).build();
             return queryResponse;
         }
+
+        List<PageEntity> finalListPages = new ArrayList<>(finalSetPages);
 
         // Calculating relative relevance
         List<Float> absRelevanceList = getAbsRelevanceList(finalListPages);
@@ -87,7 +107,7 @@ public class SearchingServiceImpl implements SearchingService {
 
             @Override
             public int compareTo(Results o) {
-                return Float.compare (o.getRelRelevance(), this.getRelRelevance());
+                return Float.compare(o.getRelRelevance(), this.getRelRelevance());
             }
         }
 
@@ -96,59 +116,64 @@ public class SearchingServiceImpl implements SearchingService {
             resultList.add(new Results(finalListPages.get(i), absRelevanceList.get(i), relRelevanceList.get(i)));
         }
 
-        resultList = resultList.stream().sorted(Results::compareTo).collect(Collectors.toList());
+        resultList.sort(Results::compareTo);
 
         List<PageEntity> pagesResult = resultList.stream().map(Results::getPageEntity).collect(Collectors.toList());
-        HashSet<PageEntity> setPages = new HashSet<>(pagesResult);
-        pagesResult = new ArrayList<>(setPages);
+        pagesResult = new ArrayList<>(new HashSet<>(pagesResult));
 
+        //System.out.println(pagesResult.size());
+        //System.exit(1);
         if (!siteRepository.existsByUrl(site)) {
             List<SiteEntity> sites = siteRepository.findAll();
             for (SiteEntity siteEntity : sites) {
                 List<DataDescription> data = new ArrayList<>(pagesResult.size());
                 int count = 0;
-                while (count <= limit) {
-                    for (Results result : resultList) {
-                        String snippet = getSnippet(result.getPageEntity(), lemmasList);
-                        if (snippet.equals("")) continue;
-                        DataDescription description = DataDescription.builder().relevance(result.getRelRelevance())
-                                .site(siteEntity.getUrl()).uri(result.getPageEntity().getPath())
-                                .siteName(siteEntity.getName()).title(LemmaFinder.getTitle(result.getPageEntity().getContent()))
-                                .snippet(snippet).build();
-                        data.add(description);
-                        count++;
-                    }
+                for (Results result : resultList) {
+                    String snippet = getSnippet(result.getPageEntity(), lemmasList);
+                    //if (snippet.equals("")) continue;
+                    DataDescription description = DataDescription.builder().relevance(result.getRelRelevance())
+                            .site(siteEntity.getUrl()).uri(result.getPageEntity().getPath())
+                            .siteName(siteEntity.getName()).title(LemmaFinder.getTitle(result.getPageEntity().getContent()))
+                            .snippet(snippet).build();
+                    data.add(description);
+                    count++;
+                    if (count >= limit) break;
                 }
-                if (data.isEmpty()) {
+                /*if (data.isEmpty()) {
+                    System.out.println("Почему-то data empty");
+                    System.out.println("Сниппеты:\n");
+                    for (Results result : resultList) {
+                        System.out.println(getSnippet(result.getPageEntity(), lemmasList));
+                    }
                     queryResponse = QueryResponse.builder().data(new ArrayList<>()).count(0).result(false).build();
                     return queryResponse;
-                }
+                }*/
                 queryResponse = QueryResponse.builder().result(true).count(data.size()).data(data).build();
             }
         } else if (siteRepository.existsByUrl(site)){
             try {
                 List<DataDescription> data = new ArrayList<>(pagesResult.size());
                 int count = 0;
-                while (count < limit) {
-                    for (Results result : resultList) {
-                        String snippet = getSnippet(result.getPageEntity(), lemmasList);
-                        if (snippet.equals("")) continue;
-                        DataDescription description = DataDescription.builder().relevance(result.getRelRelevance())
-                                .site(site).uri(result.getPageEntity().getPath())
-                                .siteName(result.getPageEntity().getSiteEntity().getName())
-                                .title(LemmaFinder.getTitle(result.getPageEntity().getContent()))
-                                .snippet(snippet).build();
-                        data.add(description);
-                        count++;
-                    }
+                for (Results result : resultList) {
+                    String snippet = getSnippet(result.getPageEntity(), lemmasList);
+                    //if (snippet.equals("")) continue;
+                    DataDescription description = DataDescription.builder().relevance(result.getRelRelevance())
+                            .site(site).uri(result.getPageEntity().getPath())
+                            .siteName(result.getPageEntity().getSiteEntity().getName())
+                            .title(LemmaFinder.getTitle(result.getPageEntity().getContent()))
+                            .snippet(snippet).build();
+                    data.add(description);
+                    count++;
+                    if (count >= limit) break;
                 }
-                if (data.isEmpty()) {
+                /*if (data.isEmpty()) {
                     queryResponse = QueryResponse.builder().data(new ArrayList<>()).count(0).result(false).build();
                     return queryResponse;
-                }
+                }*/
                 queryResponse = QueryResponse.builder().result(true).count(data.size()).data(data).build();
             } catch (Exception ignored){}
         }
+
         return queryResponse;
     }
 
@@ -184,50 +209,74 @@ public class SearchingServiceImpl implements SearchingService {
     }
 
     private String getSnippet(PageEntity page, List<String> lemmas) {
-        //System.out.println(LemmaFinder.cleanFromHtml(page.getContent()));
-        //return "";
-
         String content = page.getContent();
         String contentWithNoHtml = LemmaFinder.cleanFromHtml(content);
-        String[] sentences = contentWithNoHtml.split(" ");
-        String[] newSentences = new String[sentences.length];
-        Arrays.fill(newSentences, "");
-        int j = 0;  //Counter for newSentences
-        for (String sentence : sentences) {
-            if (!Objects.equals(sentence, "") && Character.isUpperCase(sentence.charAt(0))) {
-                newSentences[j] = sentence;
-                j++;
+        String[] sentences = contentWithNoHtml.split("\\p{Punct}");
+        //String[] newSentences = new String[sentences.length];
+        List<String> newSentences = new ArrayList<>();
+
+        for (int i = 0; i < sentences.length; i++) {
+            if (sentences[i].trim().equals(""))    continue;
+            if (Character.isUpperCase(sentences[i].charAt(0))) {
+                newSentences.add(sentences[i]);
             } else {
-                newSentences[j] = newSentences[j].concat(sentence);
+                try {
+                    newSentences.set(i, newSentences.get(i).concat(sentences[i]).concat(" "));
+                } catch (IndexOutOfBoundsException e) {
+                    newSentences.add(sentences[i] + " ");
+                }
             }
         }
 
         StringBuilder builder = new StringBuilder();
-        for (String sentence : newSentences) {
-            Set<String> lemmasSet = lemmaFinder.getLemmaSet(sentence);
-            /*if (lemmasSet.containsAll(lemmas)) {
-                String[] words = sentence.split("\\p{Punct}");
-                for (String word : words) {
-                    for (String lemma : lemmas) {
-                        if (lemmaFinder.getNormalForm(word.toLowerCase()).equals(lemma)) {
-                            builder.append("<b>").append(word).append("</b>").append(" ");
-                        } else builder.append(word).append(" ");
-                        System.out.println(word);
-                    }
-                }
-            }*/
+        System.out.println(newSentences.size());
+        List<String> sentencesWeNeed = new ArrayList<>();
+
+        for (String newSentence : newSentences) {
             for (String lemma : lemmas) {
-                if (lemmasSet.contains(lemma)) {
-                    String[] words = sentence.split("\\p{Punct}");
-                    for (String word : words) {
-                        if (lemmaFinder.getNormalForm(word.toLowerCase()).equals(lemma)) {
-                            builder.append("<b>").append(word).append("</b>");
-                        } else builder.append(word);
-                        System.out.println(word);
-                    }
+                if (lemmaFinder.getLemmaSet(newSentence).contains(lemma)) {
+                    sentencesWeNeed.add(newSentence);
                 }
             }
         }
-        return builder.toString();
+        System.out.println("Sentences we need length - " + sentencesWeNeed.size());
+
+        for (String sentence : sentencesWeNeed) {
+            System.out.println("SENTENCE " + sentence);
+
+            String[] words = sentence.split("\\s");
+            for (String word : words) {
+                String wordSmall = word.toLowerCase();
+                try {
+                    if (lemmas.contains(lemmaFinder.getNormalForm(wordSmall))) {
+                        builder.append("<b>").append(word).append("</b> ");
+                    } else {
+                        builder.append(word).append(" ");
+                    }
+                } catch (IndexOutOfBoundsException | WrongCharaterException ignored) {}
+            }
+        }
+
+        StringBuilder result = new StringBuilder();
+        String[] splitString = builder.toString().split(" ");
+        int length = 0;
+        int count = 0;
+        for (String word : splitString) {
+            if (count > 3)  break;
+            if (length <= 75) {
+                result.append(word).append(" ");
+                length += word.length();
+                length += 1;
+            } else {
+                result.append("\n").append(word).append(" ");
+                length = 0;
+                length += word.length();
+                length += 1;
+                count++;
+            }
+        }
+
+
+        return result.toString();
     }
 }

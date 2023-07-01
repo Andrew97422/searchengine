@@ -131,7 +131,7 @@ public class LemmaFinder {
         return document.title();
     }
 
-    public String getNormalForm(String word) {
+    public String getNormalForm(String word) throws ArrayIndexOutOfBoundsException {
         return luceneMorphology.getNormalForms(word).get(0);
     }
 }

@@ -95,7 +95,7 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     @Override
-    public synchronized Map<String, Object> stopIndexing() {
+    public Map<String, Object> stopIndexing() {
         if (!isRunning && isStopped) {
             Map<String, Object> response = new HashMap<>();
             response.put("result", false);
