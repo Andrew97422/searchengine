@@ -16,6 +16,7 @@ import searchengine.services.searching.LemmaFinder;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ForkJoinPool;
 import java.util.stream.Collectors;
 
@@ -66,8 +67,10 @@ public class IndexingServiceImpl implements IndexingService {
                 try {
                     pool.invoke(new RecursiveLinkParser(siteEntity.getUrl(), siteEntity, pageRepository, siteRepository, lemmaRepository, indexRepository));
                     siteEntity.setStatus(StatusSite.INDEXED);
+                    //System.out.println(siteEntity.getUrl() + " finished");
                     Thread.sleep(100);
-                } catch (RuntimeException | InterruptedException ignored) {
+                } catch (RuntimeException | InterruptedException e) {
+                    e.printStackTrace();
                 } catch (Exception e) {
                     siteEntity.setStatus(StatusSite.FAILED);
                     siteEntity.setStatusTime(new Date());
@@ -77,7 +80,6 @@ public class IndexingServiceImpl implements IndexingService {
                     isStopped = true;
                     isRunning = false;
                 }
-                System.out.println("Вышли из сайта " + siteEntity.getUrl());
                 siteRepository.save(siteEntity);
             }));
         }

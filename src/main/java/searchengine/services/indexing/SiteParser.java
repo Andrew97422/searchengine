@@ -1,10 +1,13 @@
 package searchengine.services.indexing;
 
+import lombok.RequiredArgsConstructor;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import searchengine.model.IndexEntity;
 import searchengine.model.LemmaEntity;
 import searchengine.model.PageEntity;
@@ -16,15 +19,17 @@ import searchengine.repositories.SiteRepository;
 import searchengine.services.searching.LemmaFinder;
 
 import java.io.IOException;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
+@Service
+@RequiredArgsConstructor
 public class SiteParser {
+    private final PageRepository pageRepository;
+    private final SiteRepository siteRepository;
+    private final LemmaRepository lemmaRepository;
+    private final IndexRepository indexRepository;
 
-    public HashSet<String> parseSiteToLinks(String url, SiteEntity mainSite, PageRepository pageRepository, SiteRepository siteRepository,
-                                                   LemmaRepository lemmaRepository, IndexRepository indexRepository) throws IOException, InterruptedException {
+    public HashSet<String> parseSiteToLinks(String url, SiteEntity mainSite) throws IOException, InterruptedException {
         Connection.Response response;
         try {
             response = Jsoup.connect(url).userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.11; rv:49.0) Gecko/20100101 Firefox/49.0")
@@ -40,7 +45,8 @@ public class SiteParser {
         Document doc = response.parse();
 
         PageEntity page;
-        String pathForPage = AddressChanging.getAddressForRepository(url).endsWith("/") && !(AddressChanging.getAddressForRepository(url).equals("/")) ?
+        String pathForPage = AddressChanging.getAddressForRepository(url).endsWith("/")
+                && !(AddressChanging.getAddressForRepository(url).equals("/")) ?
                 AddressChanging.getAddressForRepository(url).substring(0, AddressChanging.getAddressForRepository(url).length() - 1) :
                 AddressChanging.getAddressForRepository(url);
 
@@ -56,9 +62,9 @@ public class SiteParser {
         for (Element link : links) {
             if (
                     link.attr("abs:href").contains("http")
-                    && (link.attr("href").startsWith("/") ||
-                    (AddressChanging.getAddressWithoutW(link.attr("abs:href")).trim().
-                            startsWith(AddressChanging.getAddressWithoutW(mainSite.getUrl())))
+                            && (link.attr("href").startsWith("/") ||
+                            (AddressChanging.getAddressWithoutW(link.attr("abs:href")).trim().
+                                    startsWith(AddressChanging.getAddressWithoutW(mainSite.getUrl())))
                     ) && !(link.attr("href").matches("^#|/|$"))
             ) {
                 PageEntity pageEntity = new PageEntity();
@@ -74,7 +80,7 @@ public class SiteParser {
                 synchronized (PageRepository.class) {
                     if (!pageRepository.existsByPathAndSiteEntity(addressForRepository.substring(0, addressForRepository.length() - 1),
                             mainSite)) {
-                        System.out.println(Thread.currentThread() + " сохраняет " + link.attr("abs:href"));
+                        //System.out.println(Thread.currentThread() + " сохраняет " + link.attr("abs:href"));
                         siteMap.add(link.attr("abs:href").trim());
                         pageEntity.setPath(addressForRepository.substring(0, addressForRepository.length() - 1));
                         try {

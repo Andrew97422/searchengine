@@ -26,8 +26,9 @@ public class RecursiveLinkParser extends RecursiveTask<Set<String>> {
     protected Set<String> compute() {
         HashSet<String> siteMap;
         List<RecursiveLinkParser> tasks = new ArrayList<>();
+        SiteParser siteParser = new SiteParser(pageRepository, siteRepository, lemmaRepository, indexRepository);
         try {
-            siteMap = new SiteParser().parseSiteToLinks(url, mainSite, pageRepository, siteRepository, lemmaRepository, indexRepository);
+            siteMap = siteParser.parseSiteToLinks(url, mainSite);
         } catch (IOException | InterruptedException e) {
             throw new RuntimeException(e);
         }

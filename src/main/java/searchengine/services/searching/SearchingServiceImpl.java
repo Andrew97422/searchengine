@@ -45,7 +45,7 @@ public class SearchingServiceImpl implements SearchingService {
         lemmasList.removeIf(lemma -> !lemmaRepository.existsByLemma(lemma));
         //Отсеиваем слишком часто встречающиеся леммы
         if (!finalSite.equals(""))    lemmasList.removeIf(lemma -> ((double) lemmaRepository.findByLemma(lemma).getFrequency() /
-                pageRepository.countAllBySiteEntity(siteRepository.getByUrl(finalSite))) > 0.2);
+                pageRepository.countAllBySiteEntity(siteRepository.getByUrl(finalSite))) > 0.5);
         else {
             List<SiteEntity> siteEntities = siteRepository.findAll();
             for (SiteEntity siteEntity : siteEntities) {
@@ -80,12 +80,16 @@ public class SearchingServiceImpl implements SearchingService {
 
         Set<PageEntity> finalSetPages = new HashSet<>();
 
+        int count = 0;
         if (lemmasList.size() != 1) {
             for (int i = 1; i < lemmasList.size(); i++) {
                 LemmaEntity lemmaEntity = lemmaRepository.findByLemma(lemmasList.get(i));
                 for (int j = offset; j < listPages.size(); j++) {
                     if (indexRepository.existsByLemmaAndPage(lemmaEntity, listPages.get(j))) {
-                        finalSetPages.add(listPages.get(j));
+                        if (count < limit) {
+                            finalSetPages.add(listPages.get(j));
+                            count++;
+                        }
                     }
                 }
             }
@@ -93,7 +97,10 @@ public class SearchingServiceImpl implements SearchingService {
             LemmaEntity lemmaEntity = lemmaRepository.findByLemma(lemmasList.get(0));
             for (int j = offset; j < listPages.size(); j++) {
                 if (indexRepository.existsByLemmaAndPage(lemmaEntity, listPages.get(j))) {
-                    finalSetPages.add(listPages.get(j));
+                    if (count < limit) {
+                        finalSetPages.add(listPages.get(j));
+                        count++;
+                    }
                 }
             }
         }
@@ -108,12 +115,6 @@ public class SearchingServiceImpl implements SearchingService {
         // Calculating relative relevance
         List<Float> absRelevanceList = getAbsRelevanceList(finalListPages);
         List<Float> relRelevanceList = getRelRelevance(absRelevanceList);
-
-        finalListPages.stream().map(PageEntity::getPath).forEach(i->System.out.print(i + "\t"));
-        System.out.println();
-        absRelevanceList.forEach(i-> System.out.print(i + "\t"));
-        System.out.println();
-        relRelevanceList.forEach(i-> System.out.print(i + "\t"));
 
         @Data
         @AllArgsConstructor
@@ -142,18 +143,18 @@ public class SearchingServiceImpl implements SearchingService {
             List<SiteEntity> sites = siteRepository.findAll();
             for (SiteEntity siteEntity : sites) {
                 List<DataDescription> data = new ArrayList<>(pagesResult.size());
-                int count = 0;  //count of the results
+                int count1 = 0;  //count of the results
                 int countEmpty = 0; //count empty snippets
                 for (Results result : resultList) {
                     String snippet = getSnippet(result.getPageEntity(), lemmasList);
-                    if (snippet.equals("")) countEmpty++;
+                    if (snippet.replaceAll(" ", "").equals("")) countEmpty++;
                     DataDescription description = DataDescription.builder().relevance(result.getRelRelevance())
                             .site(siteEntity.getUrl()).uri(result.getPageEntity().getPath())
                             .siteName(siteEntity.getName()).title(LemmaFinder.getTitle(result.getPageEntity().getContent()))
                             .snippet(snippet).build();
                     data.add(description);
-                    count++;
-                    if (count >= limit) break;
+                    count1++;
+                    if (count1 >= limit) break;
                 }
                 if (countEmpty != 0) {
                     data.removeIf(record -> record.getSnippet().equals(""));
@@ -163,19 +164,19 @@ public class SearchingServiceImpl implements SearchingService {
         } else if (siteRepository.existsByUrl(site)){
             try {
                 List<DataDescription> data = new ArrayList<>(pagesResult.size());
-                int count = 0;  //count of the results
+                int count1 = 0;  //count of the results
                 int countEmpty = 0; //count empty snippets
                 for (Results result : resultList) {
                     String snippet = getSnippet(result.getPageEntity(), lemmasList);
-                    if (snippet.equals("")) countEmpty++;
+                    if (snippet.replaceAll(" ", "").equals("")) countEmpty++;
                     DataDescription description = DataDescription.builder().relevance(result.getRelRelevance())
                             .site(site).uri(result.getPageEntity().getPath())
                             .siteName(result.getPageEntity().getSiteEntity().getName())
                             .title(LemmaFinder.getTitle(result.getPageEntity().getContent()))
                             .snippet(snippet).build();
                     data.add(description);
-                    count++;
-                    if (count >= limit) break;
+                    count1++;
+                    if (count1 >= limit) break;
                 }
                 if (countEmpty != 0) {
                     data.removeIf(record -> record.getSnippet().equals(""));
