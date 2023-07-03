@@ -30,6 +30,7 @@ public class SearchingServiceImpl implements SearchingService {
     private final SiteRepository siteRepository;
     @Override
     public QueryResponse search(String query, String site, Integer offset, Integer limit) {
+        String finalSite = site;
         if (site.endsWith("/")) {
             site = site.substring(0, site.length() - 1);
         }
@@ -43,8 +44,20 @@ public class SearchingServiceImpl implements SearchingService {
         //Отсеиваем неудачные леммы
         lemmasList.removeIf(lemma -> !lemmaRepository.existsByLemma(lemma));
         //Отсеиваем слишком часто встречающиеся леммы
-        lemmasList.removeIf(lemma -> ((double) lemmaRepository.findByLemma(lemma).getFrequency() /
-                pageRepository.findAll().size()) > 0.2);
+        if (!finalSite.equals(""))    lemmasList.removeIf(lemma -> ((double) lemmaRepository.findByLemma(lemma).getFrequency() /
+                pageRepository.countAllBySiteEntity(siteRepository.getByUrl(finalSite))) > 0.2);
+        else {
+            List<SiteEntity> siteEntities = siteRepository.findAll();
+            for (SiteEntity siteEntity : siteEntities) {
+                lemmasList.removeIf(lemma -> ((double) lemmaRepository.findByLemma(lemma).getFrequency() /
+                        pageRepository.countAllBySiteEntity(siteEntity) > 0.2));
+            }
+        }
+
+        if (lemmasList.size() == 0) {
+            queryResponse = QueryResponse.builder().data(new ArrayList<>()).count(0).result(false).build();
+            return queryResponse;
+        }
 
         if (lemmasList.size() != 1) {
             try {
@@ -86,7 +99,7 @@ public class SearchingServiceImpl implements SearchingService {
         }
 
         if (finalSetPages.isEmpty()) {
-            queryResponse = QueryResponse.builder().data(new ArrayList<>()).count(0).result(false).build();
+            queryResponse = QueryResponse.builder().data(new ArrayList<>()).count(0).result(true).build();
             return queryResponse;
         }
 
@@ -129,10 +142,11 @@ public class SearchingServiceImpl implements SearchingService {
             List<SiteEntity> sites = siteRepository.findAll();
             for (SiteEntity siteEntity : sites) {
                 List<DataDescription> data = new ArrayList<>(pagesResult.size());
-                int count = 0;
+                int count = 0;  //count of the results
+                int countEmpty = 0; //count empty snippets
                 for (Results result : resultList) {
                     String snippet = getSnippet(result.getPageEntity(), lemmasList);
-                    //if (snippet.equals("")) continue;
+                    if (snippet.equals("")) countEmpty++;
                     DataDescription description = DataDescription.builder().relevance(result.getRelRelevance())
                             .site(siteEntity.getUrl()).uri(result.getPageEntity().getPath())
                             .siteName(siteEntity.getName()).title(LemmaFinder.getTitle(result.getPageEntity().getContent()))
@@ -141,15 +155,19 @@ public class SearchingServiceImpl implements SearchingService {
                     count++;
                     if (count >= limit) break;
                 }
+                if (countEmpty != 0) {
+                    data.removeIf(record -> record.getSnippet().equals(""));
+                }
                 queryResponse = QueryResponse.builder().result(true).count(data.size()).data(data).build();
             }
         } else if (siteRepository.existsByUrl(site)){
             try {
                 List<DataDescription> data = new ArrayList<>(pagesResult.size());
-                int count = 0;
+                int count = 0;  //count of the results
+                int countEmpty = 0; //count empty snippets
                 for (Results result : resultList) {
                     String snippet = getSnippet(result.getPageEntity(), lemmasList);
-                    //if (snippet.equals("")) continue;
+                    if (snippet.equals("")) countEmpty++;
                     DataDescription description = DataDescription.builder().relevance(result.getRelRelevance())
                             .site(site).uri(result.getPageEntity().getPath())
                             .siteName(result.getPageEntity().getSiteEntity().getName())
@@ -159,10 +177,12 @@ public class SearchingServiceImpl implements SearchingService {
                     count++;
                     if (count >= limit) break;
                 }
+                if (countEmpty != 0) {
+                    data.removeIf(record -> record.getSnippet().equals(""));
+                }
                 queryResponse = QueryResponse.builder().result(true).count(data.size()).data(data).build();
             } catch (Exception ignored){}
         }
-
         return queryResponse;
     }
 
@@ -261,7 +281,6 @@ public class SearchingServiceImpl implements SearchingService {
                 count++;
             }
         }
-
 
         return result.toString();
     }
